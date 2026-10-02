@@ -1,0 +1,8 @@
+.env
+.venv/
+*.pem
+__pycache__/
+*.py[cod]
+daymark.sqlite3
+daymark.sqlite3-shm
+daymark.sqlite3-wal
