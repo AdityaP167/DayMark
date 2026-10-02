@@ -1,46 +1,126 @@
-# Daymark prototype
+# Daymark
 
-Daymark is a responsive prototype for a private work journal and appraisal summary app, with a small local API and account database.
+**A private work journal that helps you remember what you accomplished.**
 
-## Run it
+Daymark is a personal work log for employees preparing for performance reviews. Record work as it happens, mark important contributions as highlights, then choose a date range to create an editable appraisal narrative grounded in your entries.
 
-The API serves the web app and its endpoints from one origin. From this directory:
+## Try the hosted app
+
+**https://daymark-uh3d.onrender.com**
+
+> **Hosted data warning:** The current Render deployment does not have a persistent disk. Its SQLite database is stored on temporary service storage and can be lost when the service restarts, redeploys, or otherwise replaces that storage. The hosted app is for preview and experimentation; do not rely on it as the only copy of important work records. Keep a separate copy of anything you need to retain. Local development data is stored separately on your own computer.
+
+The hosted service uses Render's free web service plan and may take a little time to wake after inactivity.
+
+## What you can do
+
+- Sign in with Google and keep a remembered session.
+- Create, edit, and delete dated work, certification, and award or recognition entries.
+- Add project and outcome details, and flag entries as highlights.
+- Record work for earlier dates or leave days empty.
+- Generate an editable summary for a selected date range, review its supporting entries, and save drafts.
+- Export a draft to a Word-compatible document or print it to PDF.
+- Set reminder preferences and enable browser push notifications when the service is configured for web push.
+- Use passkeys on supported devices and browsers.
+
+## Run locally
+
+You need Python 3.10 or later. From the project directory:
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
+cp .env.example .env
 uvicorn backend.main:app --reload
 ```
 
-Then open `http://localhost:8000` (use this hostname for local passkeys; `127.0.0.1` is an IP address, not a valid passkey relying-party domain). The API documentation is available at `/docs`. The SQLite database is created as `daymark.sqlite3` in this directory by default; set `DAYMARK_DB_PATH` to choose another location. A localhost run is only reachable from this computer; cross-device sync needs the same backend deployed at an HTTPS address.
+Open **http://localhost:8000**. The app and API are served from the same origin. The interactive API documentation is at **http://localhost:8000/docs**.
 
-Gemini summaries use the free tier when available. Copy `.env.example` to `.env`, set `GEMINI_API_KEY`, and keep `SUMMARY_MODE=gemini`. The API key stays on the server, and only entries in the selected date range are sent. Summary generation first extracts a concise fact record for each entry in batches of 100, then writes the appraisal narrative from those records. If extraction omits an entry, the backend adds that entry's original recorded text to the evidence set. The final draft keeps source entry IDs for review. Google states that free-tier content may be used to improve its products; review [Gemini API pricing and data use](https://ai.google.dev/gemini-api/docs/pricing) before using real or sensitive appraisal notes. Quotas and free-tier availability can change. Set `SUMMARY_MODE=mock` for local-only drafts without an API call; these format recorded fields into paragraphs without AI paraphrasing. The older paid OpenAI integration remains available with `SUMMARY_MODE=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL`.
+The local SQLite database is created as `daymark.sqlite3` in the project directory. To use another location, set `DAYMARK_DB_PATH` in `.env`. This database is independent of the hosted app's database.
 
-### Secure sign-in, remembered sessions, and passkeys
+## Configuration
 
-Sign-in uses Google OpenID Connect, so the identity provider verifies ownership of the email address. Email/password registration and login are not available. Sessions last up to 90 days and extend as the user continues using Daymark; set `DAYMARK_SESSION_DAYS` to choose a value from 7 to 365 days.
+Daymark reads configuration from environment variables. For local development, put them in `.env`; for a hosted deployment, set them in the hosting provider's service settings. Never commit `.env`, API credentials, OAuth secrets, or private key files.
 
-After signing in, open **Reminder** settings and choose **Set up a passkey**. The phone or computer will ask for Face ID, Touch ID, fingerprint, or device screen-lock verification. Daymark receives a public key, never biometric data. After the session expires, choose **Continue with passkey** on the sign-in screen. Passkeys require HTTPS on phones; localhost is treated as secure only on the same device. Configure `DAYMARK_WEBAUTHN_RP_ID` to the HTTPS site hostname when deploying behind a reverse proxy, and use `DAYMARK_WEBAUTHN_ORIGIN` only when the request's external origin cannot be detected automatically.
+### Google sign-in
 
-Google sign-in uses server-side OpenID Connect via Authlib. In Google Cloud Console, configure the authorized redirect URI to match the URL used to open Daymark. For local passkey development, add `http://localhost:8000/api/auth/google/callback`; keep any existing `127.0.0.1` callback if you still use that address for non-passkey testing. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The exact redirect must match the host and scheme. Set a persistent random `DAYMARK_OAUTH_SESSION_SECRET`; set `DAYMARK_COOKIE_SECURE=1` when serving over HTTPS.
+Google sign-in requires OAuth credentials from Google Cloud Console. Set:
 
-To enable background web push, install the declared `pywebpush` dependency, generate a VAPID key pair (the `vapid --gen` command is documented in the [py-vapid guide](https://github.com/web-push-libs/vapid/blob/main/python/README.rst)), and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` before starting Uvicorn. `VAPID_PUBLIC_KEY` must be the URL-safe `applicationServerKey` value, not the PEM file. Keep the private key on the server. Push requires HTTPS outside localhost.
+```env
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+DAYMARK_OAUTH_SESSION_SECRET=your-long-random-secret
+```
 
-## Working in this prototype
+Register the callback URL with Google, matching the exact scheme, host, and path. For local development, use:
 
-- Sign in with a verified Google account, then add, edit, and delete dated Work, Certification, and Award / recognition entries.
-- Optionally attach a project, an outcome, and a highlight flag.
-- Filter/generate a date-range appraisal narrative and inspect its supporting entries.
-- Edit and save narrative drafts to the account, download a Word-compatible document, or print/save as PDF.
-- Configure daily, weekday, or selected-day reminder preferences; this build can show browser notifications while open.
-- User data is stored in SQLite and every data query is scoped to the signed-in account.
-- Use the responsive layout on desktop and phone-sized screens.
+```text
+http://localhost:8000/api/auth/google/callback
+```
 
-## Prototype boundaries
+For the hosted app, use:
 
-This is an early local backend, not a production deployment. Google OpenID Connect sign-in, passkeys, server sessions, per-user SQLite entries and saved drafts, synced reminder preferences, and summary generation are implemented. In mock mode, summaries are assembled locally from saved entry fields; in Gemini or OpenAI mode, only entries in the selected date range are sent to the configured provider. Keep provider keys out of browser code. Existing browser-only entries can be imported into a new empty account after explicit confirmation.
+```text
+https://daymark-uh3d.onrender.com/api/auth/google/callback
+```
 
-Google sign-in requires provider credentials and callback configuration. Background web push is implemented but needs VAPID keys and an HTTPS deployment; without them, reminders only appear while the app is open. This is a responsive PWA, not separate native iOS/Android apps. Rate limiting, backups, and production database hosting also remain before launch. For production, enable secure cookies behind HTTPS and use a managed database with backups.
+Email-and-password sign-in is not available. Google verifies the account email during sign-in.
 
-The Word export is an RTF document that Microsoft Word opens; PDF uses the browser's print dialog.
+### AI summaries
+
+Gemini is the default summary provider. Set:
+
+```env
+SUMMARY_MODE=gemini
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+Only entries in the selected date range are sent for summary generation. The app extracts concise facts from entries in batches, then drafts appraisal-style paragraphs from those facts and retains source-entry references for review. AI-generated text should be checked and edited before use in a performance review.
+
+Gemini free-tier availability, quotas, and data terms can change. Review [Gemini API pricing and data use](https://ai.google.dev/gemini-api/docs/pricing) before sending sensitive or confidential work information. For a local draft without an AI API call, set `SUMMARY_MODE=mock`; this formats recorded fields into paragraphs without AI paraphrasing. An optional legacy OpenAI mode is also available with `SUMMARY_MODE=openai`, `OPENAI_API_KEY`, and `OPENAI_MODEL`.
+
+### Passkeys and secure cookies
+
+For a hosted HTTPS deployment, set:
+
+```env
+DAYMARK_COOKIE_SECURE=1
+DAYMARK_WEBAUTHN_RP_ID=your-site-hostname
+```
+
+`DAYMARK_WEBAUTHN_RP_ID` is the hostname only, without `https://` or a port. For this hosted app it is `daymark-uh3d.onrender.com`. Local passkey testing should use `localhost`; passkeys on phones require HTTPS.
+
+Sessions last 90 days by default and extend with use. To choose a different duration, set `DAYMARK_SESSION_DAYS` to a number from 7 to 365.
+
+### Push notifications
+
+Background web push requires an HTTPS origin and a matching VAPID key pair:
+
+```env
+VAPID_PUBLIC_KEY=your-url-safe-application-server-key
+VAPID_PRIVATE_KEY=/path/to/vapid_private.pem
+VAPID_SUBJECT=mailto:you@example.com
+```
+
+`VAPID_PUBLIC_KEY` is the URL-safe application server key, not a PEM file. `VAPID_PRIVATE_KEY` points to the private key file; keep that file secret and outside the repository. The public and private keys must belong to the same pair. Without VAPID configuration, browser notifications may work only while the app is open, and background push is unavailable.
+
+## Data and privacy
+
+The app stores journal entries, saved drafts, and reminder preferences in SQLite, scoped to the signed-in account. Local and hosted installations use separate databases; signing in with the same Google account does not synchronize or migrate entries between them. The current hosted Render service has no persistent disk or database backup, so its data can be lost. This prototype does not provide a guaranteed backup or recovery system.
+
+Keep API keys and OAuth credentials on the server. Do not add secrets to frontend code, commit them to GitHub, or include confidential employer information unless you have reviewed the AI provider's data terms and your employer's policies.
+
+## Deployment notes
+
+The app can run on a Python ASGI host with HTTPS. A typical Render configuration is:
+
+- **Build command:** `pip install -r backend/requirements.txt`
+- **Start command:** `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+
+Set the required secrets and provider credentials in the host's environment settings. For a reliable production deployment, use a persistent managed database with backups and durable storage; the current hosted free deployment does not have a persistent disk. Background reminder scheduling may also be interrupted when a free web service sleeps.
+
+## Project status
+
+Daymark is an evolving personal project/prototype. It is a responsive web app and installable PWA, not a native iOS or Android app. Review generated summaries and keep independent backups of any work records you need.
